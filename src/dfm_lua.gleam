@@ -7,6 +7,9 @@ import json_value
 
 pub fn main() -> Nil {
   let lua = glua.new() |> init()
+  let assert Ok(#(_lua, res)) =
+    glua.eval(lua, "return dfm.implementation", decode.dynamic)
+  echo res
   Nil
 }
 
@@ -61,10 +64,20 @@ fn json_value_to_lua(lua: glua.Lua, val: json_value.JsonValue) {
   }
 }
 
+const api_version = "0.1.0"
+
 pub fn init(state lua: glua.Lua) -> glua.Lua {
+  let #(lua, impl) = glua.string(lua, "gleam")
+  let #(lua, api_version) = glua.string(lua, api_version)
   let #(lua, parse_json) = parse_json(lua)
-  let assert Ok(lua) = glua.set(lua, ["dfm", "parse_json"], parse_json)
-  // let #(lua, proxy) = make_immutable(lua, table)
+  let #(lua, table) =
+    glua.table(lua, #(glua.string, lua_identity), [
+      #("parse_json", parse_json),
+      #("implementation", impl),
+      #("version", api_version),
+    ])
+  let #(lua, proxy) = make_immutable(lua, table)
+  let assert Ok(lua) = glua.set(lua, ["dfm"], proxy)
   lua
 }
 

@@ -14,7 +14,7 @@ version = "1.0.0"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
-glua = { git = "https://github.com/DynamicCake/glua.git", ref = "fix/function-not-encoding" }
+glua = { git = "https://github.com/selenil/glua.git", ref = "3f5b4b7662d0735b339a9ccb0de0f501673a5c24"}
 gl_dfjson = ">= 1.1.1 and < 2.0.0"
 json_value = ">= 1.0.0 and < 2.0.0"
 

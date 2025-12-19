@@ -1,9 +1,7 @@
 import dfm_lua
-import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/json
-import gleam/list
 import gleeunit
 import glua
 
@@ -45,8 +43,7 @@ pub fn json_parse_test() {
       ]),
     ])
 
-  let #(lua, str) =
-    person |> person_to_json |> json.to_string |> glua.string(lua, _)
+  let str = person |> person_to_json |> json.to_string |> glua.string
 
   let assert Ok(#(_lua, [res, _nil])) =
     glua.call_function_by_name(
@@ -57,23 +54,4 @@ pub fn json_parse_test() {
     )
   // TODO: Test this later, I am going to crash out if I keep doing this
   Nil
-}
-
-fn decode_pair_properties() {
-  use pair_list <- decode.then(decode.list(decode_pair()))
-  pair_list |> dynamic.properties |> decode.success
-}
-
-fn decode_pair() {
-  use a <- decode.field(0, decode.dynamic)
-  use b <- decode.field(1, decode.dynamic)
-  decode.success(#(a, b))
-}
-
-// gleeunit test functions end in `_test`
-pub fn hello_world_test() {
-  let name = "Joe"
-  let greeting = "Hello, " <> name <> "!"
-
-  assert greeting == "Hello, Joe!"
 }

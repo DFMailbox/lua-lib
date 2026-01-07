@@ -1,157 +1,157 @@
+import deser
+import gleam/bool
 import gleam/dict
-import gleam/dynamic
-import gleam/dynamic/decode
 import gleam/list
 import gleam/pair
 import gleam/result
 import glua
 import json_value
 
-pub fn main() -> Nil {
-  let lua = glua.new() |> init()
-  let assert Ok(res) =
-    glua.eval(
-      lua,
-      "return dfm.stringify_json {[dfm.empty_list()] = dfm.empty_list()}",
-    )
-    |> glua.dec(decode.dynamic)
-  echo res.1
-  Nil
+pub type DfmActor {
+  DfmActor(
+    initial: glua.Lua,
+    state: json_value.JsonValue,
+    router: glua.Function,
+    commands: List(glua.Function),
+  )
+}
+
+fn deser_error(lua, list) {
+  #(lua, list.map(list, deser.error_to_string))
 }
 
 fn parse_json() {
-  let nil = glua.nil()
   glua.function(fn(lua, args) {
-    let result = case args {
-      [str, ..] -> {
-        use str <- result.try(
-          decode.run(str, decode.string)
-          |> result.replace_error("ArgType"),
-        )
-        use val <- result.try(
-          json_value.parse(str) |> result.replace_error("ParseError"),
-        )
-        json_value_to_lua(val) |> Ok
-      }
-      [] -> {
-        Error("NoArgs")
-      }
-    }
-    case result {
-      Ok(res) -> {
-        #(lua, [res, nil])
-      }
-      Error(str) -> {
-        #(lua, [nil, glua.string(str)])
-      }
-    }
+    use str <- result.try(
+      deser.run_list(lua, args, deser.at([glua.int(1)], deser.string))
+      |> result.map_error(deser_error(lua, _)),
+    )
+    use val <- result.try(
+      json_value.parse(str) |> result.replace_error(#(lua, ["ParseError"])),
+    )
+    let #(lua, val) = json_value_to_lua(lua, val)
+    Ok(#(lua, [val]))
   })
+  |> glua.func_to_val
 }
 
-fn json_value_to_lua(val: json_value.JsonValue) {
+fn json_value_to_lua(
+  lua: glua.Lua,
+  val: json_value.JsonValue,
+) -> #(glua.Lua, glua.Value) {
   case val {
-    json_value.Object(obj) ->
-      dict.to_list(obj)
-      |> list.map(fn(val) {
-        let #(k, v) = val
-        #(glua.string(k), json_value_to_lua(v))
-      })
-      |> glua.table()
-
-    json_value.Array(arr) -> {
-      list.map_fold(arr, 1, fn(acc, it) {
-        #(acc + 1, #(glua.int(acc), json_value_to_lua(it)))
-      }).1
-      |> glua.table()
+    json_value.Object(obj) -> {
+      let #(lua, tbl) =
+        dict.to_list(obj)
+        |> list.map_fold(lua, fn(lua, pair) {
+          let #(lua, val) = json_value_to_lua(lua, pair.1)
+          #(lua, #(glua.string(pair.0), val))
+        })
+      glua.table(lua, tbl)
     }
 
-    json_value.Bool(bool) -> glua.bool(bool)
-    json_value.Float(float) -> glua.float(float)
-    json_value.Int(int) -> glua.int(int)
-    json_value.String(str) -> glua.string(str)
-    json_value.Null -> glua.nil()
+    json_value.Array(arr) -> {
+      let #(lua, arr) =
+        list.map_fold(arr, lua, fn(lua, it) { json_value_to_lua(lua, it) })
+      glua.table_list(lua, arr)
+    }
+
+    json_value.Bool(bool) -> #(lua, glua.bool(bool))
+    json_value.Float(float) -> #(lua, glua.float(float))
+    json_value.Int(int) -> #(lua, glua.int(int))
+    json_value.String(str) -> #(lua, glua.string(str))
+    json_value.Null -> #(lua, glua.nil())
   }
 }
 
 fn serialize_json() {
   glua.function(fn(lua, args) {
-    let result = case args {
-      [it, ..] -> {
-        use json <- result.try(
-          decode.run(it, serialize())
-          |> result.replace_error("InvalidData"),
-        )
-        json_value.to_string(json)
-        |> glua.string
-        |> Ok
-      }
-      [] -> {
-        Error("NoArgs")
-      }
-    }
-    case result {
-      Ok(res) -> {
-        #(lua, [res, glua.nil()])
-      }
-      Error(str) -> {
-        #(lua, [glua.nil(), glua.string(str)])
-      }
-    }
+    use json <- result.try(
+      deser.run_list(lua, args, deser.at([glua.int(1)], serialize()))
+      |> result.map_error(deser_error(lua, _)),
+    )
+    let str =
+      json_value.to_string(json)
+      |> glua.string()
+
+    #(lua, [str]) |> Ok
   })
+  |> glua.func_to_val
 }
 
-@external(erlang, "gleam@function", "identity")
-fn coerce_dyn(a: anything) -> dynamic.Dynamic
-
 fn serialize() {
-  decode.one_of(decode.string |> decode.map(json_value.String), [
-    decode.bool |> decode.map(json_value.Bool),
-    decode.int |> decode.map(json_value.Int),
-    decode.float |> decode.map(json_value.Float),
-    decode.dict(decode.string, decode.recursive(serialize))
-      |> decode.map(json_value.Object),
-    glua.decode_table_list(decode.recursive(serialize))
-      |> decode.map(json_value.Array),
-    decode.optional(decode.int) |> decode.map(fn(_) { json_value.Null }),
+  deser.one_of(deser.string |> deser.map(json_value.String), [
+    deser.bool |> deser.map(json_value.Bool),
+    deser.int |> deser.map(json_value.Int),
+    deser.number |> deser.map(json_value.Float),
+    deser.optional(deser.int) |> deser.map(fn(_) { json_value.Null }),
     {
-      use then <- decode.then(decode.dynamic)
-      case then == coerce_dyn(empty_list_data()) {
-        True -> decode.success(json_value.Array([]))
-        False -> decode.failure(json_value.Null, "Empty list")
+      use lua, table <- deser.then(deser.raw)
+
+      case glua.call_function_by_name(lua, ["_G", "getmetatable"], [table]) {
+        Ok(#(lua, [metatable])) -> {
+          let is_list =
+            deser.run(
+              lua,
+              metatable,
+              deser.at([glua.string("dfm_list")], deser.bool),
+            )
+            |> result.unwrap(False)
+
+          use <- bool.guard(
+            !is_list,
+            deser.failure(json_value.Null, "Empty List"),
+          )
+          deser.success(json_value.Array([]))
+        }
+        _ -> deser.failure(json_value.Null, "Empty list")
       }
     },
+    deser.list(deser.recursive(serialize))
+      |> deser.map(json_value.Array),
+    deser.dict(deser.string, deser.recursive(serialize))
+      |> deser.map(json_value.Object),
   ])
 }
 
-type EmptyList {
-  EmptyList(id: Int)
-}
-
-/// An empty list
-/// Contains random bytes to discourage manual construction
-const raw_empty_list = EmptyList(0xb150c8b3e22d339b0661d1d03c2)
-
-pub fn empty_list_data() {
-  glua.userdata(raw_empty_list)
-}
-
 fn empty_list() {
-  glua.function(fn(lua, _args) { #(lua, [empty_list_data()]) })
+  glua.function(fn(lua, args) {
+    let raw_decoder = {
+      use _lua, list <- deser.then(deser.raw)
+      case deser.classify(list) {
+        "Table" -> deser.success(list)
+        _ -> deser.failure(list, "Table")
+      }
+    }
+    use table <- result.try(
+      deser.run_list(lua, args, deser.at([glua.int(1)], raw_decoder))
+      |> result.map_error(deser_error(lua, _)),
+    )
+    let #(lua, metatable) =
+      glua.table(lua, [#(glua.string("dfm_list"), glua.bool(True))])
+    use #(lua, _table) <- result.try(
+      glua.call_function_by_name(lua, ["setmetatable"], [table, metatable])
+      |> result.replace_error(#(lua, ["setmetatable failed"])),
+    )
+    Ok(#(lua, [table]))
+  })
+  |> glua.func_to_val
 }
 
 const api_version = "0.1.0"
 
 pub fn init(state lua: glua.Lua) -> glua.Lua {
-  let table =
+  let #(lua, table) =
     glua.table(
+      lua,
       [
         #("parse_json", parse_json()),
         #("stringify_json", serialize_json()),
         #("implementation", glua.string("gleam")),
         #("version", glua.string(api_version)),
-        #("empty_list", empty_list()),
+        #("make_list", empty_list()),
       ]
-      |> list.map(pair.map_first(_, glua.string)),
+        |> list.map(pair.map_first(_, glua.string)),
     )
 
   let assert Ok(lua) = glua.set(lua, ["dfm"], table)

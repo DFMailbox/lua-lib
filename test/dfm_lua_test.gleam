@@ -1,3 +1,4 @@
+import deser
 import dfm_lua
 import gleam/dynamic/decode
 import gleam/json
@@ -22,14 +23,14 @@ fn person_to_json(person: Person) -> json.Json {
 }
 
 fn person_decoder() {
-  use name <- decode.field("name", decode.string)
-  use age <- decode.field("age", decode.int)
+  use name <- deser.field(glua.string("name"), deser.string)
+  use age <- deser.field(glua.string("age"), deser.int)
 
-  use children <- decode.field(
-    "children",
-    glua.decode_table_list(person_decoder()),
+  use children <- deser.field(
+    glua.string("children"),
+    deser.list(person_decoder()),
   )
-  decode.success(Person(name:, age:, children: children))
+  deser.success(Person(name:, age:, children: children))
 }
 
 pub fn json_parse_test() {
@@ -47,8 +48,8 @@ pub fn json_parse_test() {
 
   let str = person |> person_to_json |> json.to_string |> glua.string
 
-  let assert Ok(#(_lua, res)) =
+  let assert Ok(#(lua, [res])) =
     glua.call_function_by_name(lua, ["dfm", "parse_json"], [str])
-    |> glua.dec_one(person_decoder())
+  let assert Ok(res) = deser.run(lua, res, person_decoder())
   assert person == res
 }

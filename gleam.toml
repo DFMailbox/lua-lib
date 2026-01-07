@@ -16,7 +16,7 @@ version = "1.0.0"
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
 gl_dfjson = ">= 1.1.1 and < 2.0.0"
 json_value = ">= 1.0.0 and < 2.0.0"
-glua = { git = "https://github.com/DynamicCake/glua", ref = "feature/throw-errors" }
+glua = { git = "https://github.com/DynamicCake/glua", ref = "295c28353ee9012e100ae5e43ef8d920a1b10410" }
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

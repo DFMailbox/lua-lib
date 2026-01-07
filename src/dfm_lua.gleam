@@ -9,11 +9,101 @@ import json_value
 
 pub type DfmActor {
   DfmActor(
-    initial: glua.Lua,
+    /// Do not mutate this
+    lua: glua.Lua,
     state: json_value.JsonValue,
     router: glua.Function,
-    commands: List(glua.Function),
   )
+}
+
+pub type MailboxMessage {
+  MailboxMessage(
+    data: String,
+    timestamp: Int,
+    from: Int,
+    to_plot_id: Int,
+    to_mailbox_id: String,
+  )
+}
+
+pub type RouteDecision {
+  RouteDecision(response: json_value.JsonValue, send: List(DirectMessage))
+}
+
+pub type DirectMessage {
+  DirectMessage(data: String, plot_id: Int, mailbox_id: String)
+}
+
+pub type ActorError {
+  LuaError(glua.LuaError)
+  SchemaError(List(deser.DeserializeError))
+}
+
+pub fn route_message(
+  actor: DfmActor,
+  message: MailboxMessage,
+) -> Result(#(RouteDecision, json_value.JsonValue), ActorError) {
+  let #(lua, msg) =
+    glua.table(actor.lua, [
+      #(glua.string("data"), glua.string(message.data)),
+      #(glua.string("timestamp"), glua.int(message.timestamp)),
+      #(glua.string("from"), glua.int(message.from)),
+      #(glua.string("to"), glua.int(message.to_plot_id)),
+      #(glua.string("to_mailbox"), glua.string(message.to_mailbox_id)),
+    ])
+  let #(lua, state) = json_value_to_lua(lua, actor.state)
+  use #(lua, res) <- result.try(
+    glua.call_function(lua, actor.router, [msg, state])
+    |> result.map_error(LuaError),
+  )
+  use out <- result.try(
+    deser.run_multi(lua, res, {
+      use decision <- deser.item(1, {
+        use response <- deser.field(glua.string("response"), serialize())
+        use send <- deser.field(
+          glua.string("send"),
+          deser.list({
+            use data <- deser.field(glua.string("data"), deser.string)
+            use plot_id <- deser.field(glua.string("plot_id"), deser.int)
+            use mailbox_id <- deser.field(
+              glua.string("mailbox_id"),
+              deser.string,
+            )
+            deser.success(DirectMessage(data:, plot_id:, mailbox_id:))
+          }),
+        )
+        deser.success(RouteDecision(response:, send:))
+      })
+      use new_state <- deser.item(2, serialize())
+      deser.success(#(decision, new_state))
+    })
+    |> result.map_error(SchemaError),
+  )
+  Ok(out)
+}
+
+pub fn initialize_actor(
+  code: String,
+  initial: json_value.JsonValue,
+) -> Result(DfmActor, ActorError) {
+  let lua =
+    glua.new()
+    |> init()
+
+  use #(lua, res) <- result.try(
+    glua.eval(lua, code) |> result.map_error(LuaError),
+  )
+  let deserializer = {
+    use actor <- deser.item(1, {
+      use router <- deser.field(glua.string("router"), deser.function)
+      deser.success(DfmActor(lua:, state: initial, router:))
+    })
+    deser.success(actor)
+  }
+  use actor <- result.try(
+    deser.run_multi(lua, res, deserializer) |> result.map_error(SchemaError),
+  )
+  Ok(actor)
 }
 
 fn deser_error(lua, list) {
@@ -23,7 +113,10 @@ fn deser_error(lua, list) {
 fn parse_json() {
   glua.function(fn(lua, args) {
     use str <- result.try(
-      deser.run_list(lua, args, deser.at([glua.int(1)], deser.string))
+      deser.run_multi(lua, args, {
+        use str <- deser.item(1, deser.string)
+        deser.success(str)
+      })
       |> result.map_error(deser_error(lua, _)),
     )
     use val <- result.try(
@@ -67,7 +160,10 @@ fn json_value_to_lua(
 fn serialize_json() {
   glua.function(fn(lua, args) {
     use json <- result.try(
-      deser.run_list(lua, args, deser.at([glua.int(1)], serialize()))
+      deser.run_multi(lua, args, {
+        use json <- deser.item(1, serialize())
+        deser.success(json)
+      })
       |> result.map_error(deser_error(lua, _)),
     )
     let str =
@@ -124,7 +220,10 @@ fn empty_list() {
       }
     }
     use table <- result.try(
-      deser.run_list(lua, args, deser.at([glua.int(1)], raw_decoder))
+      deser.run_multi(lua, args, {
+        use raw <- deser.item(1, raw_decoder)
+        deser.success(raw)
+      })
       |> result.map_error(deser_error(lua, _)),
     )
     let #(lua, metatable) =

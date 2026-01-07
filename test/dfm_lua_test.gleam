@@ -1,9 +1,10 @@
 import deser
 import dfm_lua
-import gleam/dynamic/decode
+import gleam/dict
 import gleam/json
 import gleeunit
 import glua
+import json_value
 
 pub fn main() -> Nil {
   gleeunit.main()
@@ -52,4 +53,20 @@ pub fn json_parse_test() {
     glua.call_function_by_name(lua, ["dfm", "parse_json"], [str])
   let assert Ok(res) = deser.run(lua, res, person_decoder())
   assert person == res
+}
+
+pub fn json_stringifiy_test() {
+  let lua =
+    glua.new()
+    |> dfm_lua.init()
+  let assert Ok(#(lua, [res])) =
+    glua.eval(
+      lua,
+      "local list = dfm.make_list({}) 
+      return dfm.stringify_json {key = list}",
+    )
+  let assert Ok(json) = deser.run(lua, res, deser.string)
+  let assert Ok(json) = json_value.parse(json)
+  assert json
+    == json_value.Object([#("key", json_value.Array([]))] |> dict.from_list)
 }

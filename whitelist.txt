@@ -1,0 +1,115 @@
+Extracted in luerl 1.5.1
+
+  _VERSION
+  assert
+x collectgarbage
+x dofile 
+m eprint 
+  error
+  getmetatable 
+  ipairs 
+  load 
+x loadfile 
+x loadstring 
+  pairs 
+  pcall 
+m print 
+  rawequal 
+  rawget 
+  rawlen
+  rawset 
+m require 
+  select 
+  setmetatable 
+  string 
+  next
+  stringify 
+  table 
+  tonumber 
+  tostring
+  type 
+  unpack 
+  utf8 
+  val_to_str 
+  bit32 = {
+    arshift 
+    band 
+    bnot 
+    bor 
+    btest 
+    bxor 
+    extract 
+    lrotate 
+    lshift 
+    replace 
+    rrotate 
+    rshift 
+  },
+x debug = {
+x   getmetatable 
+x   getuservalue 
+x   setmetatable 
+x   setuservalue 
+x },
+x io = {
+x   flush 
+x   write
+x },
+  math = {
+    abs 
+    acos 
+    asin 
+    atan 
+    atan2 
+    ceil 
+    cos 
+    cosh 
+    deg 
+    exp 
+    floor 
+    fmod 
+    frexp 
+    huge 
+    ldexp 
+    log 
+    log10 
+    max 
+    maxinteger 
+    min 
+    mininteger 
+    modf 
+    pi 
+    pow 
+    rad 
+    random 
+    randomseed 
+    sin 
+    sinh 
+    sqrt 
+    tan 
+    tanh 
+    tointeger 
+    type 
+  },
+  os = {
+    clock
+    date
+    difftime 
+x   execute 
+x   exit 
+x   getenv 
+x   remove
+x   rename 
+    time 
+x   tmpname 
+  },
+m package = {
+m   config 
+m   preload 
+m   searchers = {
+m     [1] = <function:function: luerl_lib_package:preload_searcher>,
+m     [2] = <function:function: luerl_lib_package:lua_searcher>,
+m   },
+m   searchpath
+m },
+  

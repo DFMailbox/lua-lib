@@ -1,0 +1,2 @@
+This is supposed to be an empty directory for users' scripts.
+Git won't let me check in an empty folder also.

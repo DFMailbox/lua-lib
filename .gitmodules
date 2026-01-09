@@ -1,0 +1,3 @@
+[submodule "priv/dfm_library"]
+	path = priv/dfm_library
+	url = https://github.com/DFMailbox/mshine-lib
